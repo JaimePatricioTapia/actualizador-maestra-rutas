@@ -322,32 +322,40 @@ def matching_relativo(df_maestra: pd.DataFrame, sin_coincidencia: List[Dict]) ->
     if sin_match_ciclo1:
         print("   🔍 Ciclo 2: Buscando por center_code (ignora diferencia de formato)...")
         
-        # Crear índice por center_code en maestra
+        # Crear índice por center_code NORMALIZADO en maestra (solo dígitos)
         maestra_por_center = {}
         for idx, row in maestra_supervisores.iterrows():
-            center_code = str(row[CAMPO_CENTER_CODE]).strip()
+            center_code_raw = str(row[CAMPO_CENTER_CODE]).strip()
+            center_code_norm = extraer_digitos(center_code_raw)  # Normalizar a solo dígitos
             center_desc_palabras = extraer_palabras_clave(row.get('center_desc', ''))
             
-            if center_code not in maestra_por_center:
-                maestra_por_center[center_code] = []
+            if center_code_norm not in maestra_por_center:
+                maestra_por_center[center_code_norm] = []
             
-            maestra_por_center[center_code].append({
+            maestra_por_center[center_code_norm].append({
                 'idx': idx,
                 'row': row,
+                'center_code_original': center_code_raw,
                 'center_desc_palabras': center_desc_palabras
             })
         
+        print(f"      DEBUG: Índice maestra tiene {len(maestra_por_center)} center_codes únicos")
+        
         for item in sin_match_ciclo1:
             comp_row = item['compilado_row']
-            center_code = str(item['center_code']).strip()
+            center_code_raw = str(item['center_code']).strip()
+            center_code_norm = extraer_digitos(center_code_raw)  # Normalizar a solo dígitos
             center_desc_comp = extraer_palabras_clave(comp_row.get('center_desc', ''))
             
-            if center_code in maestra_por_center:
-                candidatos = maestra_por_center[center_code]
+            print(f"      DEBUG: Buscando center_code normalizado: '{center_code_norm}' (original: '{center_code_raw}')")
+            
+            # Buscar por center_code normalizado
+            if center_code_norm in maestra_por_center:
+                candidatos = maestra_por_center[center_code_norm]
                 
                 # Buscar el candidato con mayor similitud en center_desc
                 mejor_match = None
-                mejor_score = 0
+                mejor_score = -1  # Cambiado a -1 para aceptar score 0
                 
                 for candidato in candidatos:
                     palabras_comunes = center_desc_comp & candidato['center_desc_palabras']
@@ -357,39 +365,45 @@ def matching_relativo(df_maestra: pd.DataFrame, sin_coincidencia: List[Dict]) ->
                         mejor_score = score
                         mejor_match = candidato
                 
+                # Si no hay ningún candidato con palabras en común, tomar el primero
+                if mejor_match is None and candidatos:
+                    mejor_match = candidatos[0]
+                    mejor_score = 0
+                
                 if mejor_match is not None:
                     # Match por center_code encontrado
+                    confianza = 0.70 if mejor_score > 0 else 0.50  # Menor confianza sin palabras comunes
                     coincidencias.append({
                         'compilado_idx': item['compilado_idx'],
                         'maestra_idx': mejor_match['idx'],
-                        'center_code': center_code,
+                        'center_code': center_code_raw,
                         'tipo_match': 'RELATIVO_CENTERCODE',
                         'compilado_row': comp_row,
-                        'confianza': 0.70,  # Menor confianza porque formato difiere
+                        'confianza': confianza,
                         'region': normalizar_texto(comp_row.get('region_desc', '')),
                         'familia': 'FORMATO_DIFERENTE',
-                        'digitos': extraer_digitos(center_code),
-                        'palabras_comunes': list(center_desc_comp & mejor_match['center_desc_palabras'])
+                        'digitos': center_code_norm,
+                        'palabras_comunes': list(center_desc_comp & mejor_match['center_desc_palabras']) if mejor_match else []
                     })
                 else:
                     # center_code existe pero no hay match de palabras
                     sin_match_final.append({
                         'compilado_idx': item['compilado_idx'],
-                        'center_code': center_code,
+                        'center_code': center_code_raw,
                         'compilado_row': comp_row,
                         'region': normalizar_texto(comp_row.get('region_desc', '')),
                         'familia': normalizar_familia(comp_row.get('customer_desc', ''), comp_row.get('formato', '')),
-                        'digitos': extraer_digitos(center_code)
+                        'digitos': center_code_norm
                     })
             else:
                 # center_code no existe en maestra
                 sin_match_final.append({
                     'compilado_idx': item['compilado_idx'],
-                    'center_code': center_code,
+                    'center_code': center_code_raw,
                     'compilado_row': comp_row,
                     'region': normalizar_texto(comp_row.get('region_desc', '')),
                     'familia': normalizar_familia(comp_row.get('customer_desc', ''), comp_row.get('formato', '')),
-                    'digitos': extraer_digitos(center_code)
+                    'digitos': center_code_norm
                 })
         
         print(f"      Ciclo 2 - Coincidencias adicionales: {len(coincidencias) - len([c for c in coincidencias if c['tipo_match'] == 'RELATIVO'])}")
