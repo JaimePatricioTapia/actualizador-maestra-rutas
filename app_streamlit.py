@@ -27,84 +27,143 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS personalizados
+# Estilos CSS personalizados - Inspirado en Castaño
 st.markdown("""
 <style>
-    /* Tema oscuro mejorado */
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+    
+    /* Variables de color Castaño */
+    :root {
+        --castano-gold: #FDBA24;
+        --castano-brown: #3D0C11;
+        --castano-red: #D71934;
+        --castano-beige: #F2ECE1;
+        --castano-white: #FFFFFF;
+        --castano-text: #906F6F;
+    }
+    
+    /* Fondo general */
     .stApp {
-        background: linear-gradient(135deg, #0E1117 0%, #1a1f2e 100%);
+        background: var(--castano-beige) !important;
+        font-family: 'Poppins', sans-serif !important;
+    }
+    
+    /* Header con logo simulado */
+    .header-bar {
+        background: var(--castano-gold);
+        color: var(--castano-brown);
+        padding: 0.5rem;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.9rem;
+        border-radius: 0 0 16px 16px;
+        margin-bottom: 1rem;
     }
     
     /* Título principal */
     .main-title {
         text-align: center;
-        font-size: 2.5rem;
+        font-size: 2.2rem;
         font-weight: 700;
-        background: linear-gradient(90deg, #00D9FF, #00FF88);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 0.5rem;
+        color: var(--castano-brown) !important;
+        font-family: 'Poppins', sans-serif !important;
+        margin-bottom: 0.3rem;
     }
     
     .subtitle {
         text-align: center;
-        color: #8892A0;
+        color: var(--castano-text);
         font-size: 1rem;
         margin-bottom: 2rem;
+        font-family: 'Poppins', sans-serif !important;
     }
     
-    /* Cards de KPIs */
-    .kpi-container {
-        display: flex;
-        justify-content: center;
-        gap: 1.5rem;
-        flex-wrap: wrap;
-        margin: 2rem 0;
+    /* Cards y contenedores */
+    .stFileUploader > div {
+        background: var(--castano-white) !important;
+        border-radius: 16px !important;
+        border: 2px solid var(--castano-gold) !important;
     }
     
-    .kpi-card {
-        background: linear-gradient(145deg, #1E2329, #2A3140);
-        border-radius: 16px;
-        padding: 1.5rem 2rem;
-        text-align: center;
-        border: 1px solid #3A4150;
-        min-width: 180px;
+    /* Botones primarios */
+    .stButton > button {
+        background: var(--castano-red) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 24px !important;
+        padding: 0.75rem 2rem !important;
+        font-weight: 600 !important;
+        font-family: 'Poppins', sans-serif !important;
+        transition: all 0.3s ease !important;
     }
     
-    .kpi-value {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: #00D9FF;
+    .stButton > button:hover {
+        background: var(--castano-brown) !important;
+        transform: translateY(-2px) !important;
     }
     
-    .kpi-label {
-        font-size: 0.9rem;
-        color: #8892A0;
-        margin-top: 0.5rem;
+    /* Métricas/KPIs */
+    .stMetric {
+        background: var(--castano-white) !important;
+        border-radius: 16px !important;
+        padding: 1rem !important;
+        border: 1px solid rgba(61, 12, 17, 0.1) !important;
+    }
+    
+    .stMetric label {
+        color: var(--castano-text) !important;
+        font-family: 'Poppins', sans-serif !important;
+    }
+    
+    .stMetric [data-testid="stMetricValue"] {
+        color: var(--castano-brown) !important;
+        font-family: 'Poppins', sans-serif !important;
+        font-weight: 700 !important;
     }
     
     /* Botones de descarga */
-    .download-section {
-        background: linear-gradient(145deg, #1E2329, #2A3140);
-        border-radius: 16px;
-        padding: 1.5rem;
-        margin-top: 2rem;
-        border: 1px solid #3A4150;
+    .stDownloadButton > button {
+        background: var(--castano-gold) !important;
+        color: var(--castano-brown) !important;
+        border: none !important;
+        border-radius: 24px !important;
+        font-weight: 600 !important;
+        font-family: 'Poppins', sans-serif !important;
+    }
+    
+    .stDownloadButton > button:hover {
+        background: var(--castano-brown) !important;
+        color: white !important;
+    }
+    
+    /* Mensajes de info */
+    .stAlert {
+        border-radius: 16px !important;
     }
     
     /* Footer */
     .footer {
         text-align: center;
-        color: #5A6270;
+        color: var(--castano-text);
         font-size: 0.8rem;
         margin-top: 3rem;
         padding: 1rem;
+        font-family: 'Poppins', sans-serif !important;
+    }
+    
+    /* Divisores */
+    hr {
+        border-color: var(--castano-gold) !important;
+        opacity: 0.3 !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
+# Header con estilo Castaño
+st.markdown('<div class="header-bar">🥐 Sistema de Planificación de Rutas - Castaño</div>', unsafe_allow_html=True)
+
 # Título principal
-st.markdown('<h1 class="main-title">📊 Actualizador Maestra de Rutas</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-title">Actualizador Maestra de Rutas</h1>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Sistema de sincronización y comparación de planillas</p>', unsafe_allow_html=True)
 
 # Inicializar session state
@@ -328,4 +387,4 @@ if st.session_state.processed and st.session_state.resultados:
         st.rerun()
 
 # Footer
-st.markdown('<p class="footer">Sistema de Actualización de Maestra de Rutas v1.0 | 2026</p>', unsafe_allow_html=True)
+st.markdown('<p class="footer">🥐 Castaño - Sistema de Planificación de Rutas | Tienda Perfecta 2026</p>', unsafe_allow_html=True)
