@@ -226,13 +226,8 @@ def matching_relativo(df_maestra: pd.DataFrame, sin_coincidencia: List[Dict]) ->
     Para filas sin match exacto, aplica heurísticas de matching relativo.
     
     Lógica mejorada:
-    1. Normaliza región: region_desc
-    2. Normaliza familia: customer_desc + formato
-    3. Extrae dígitos de center_code
-    4. Busca coincidencia por (region, familia, dígitos)
-    5. Si hay match, verifica similitud de center_desc
-    6. Si hay exactamente 1 candidato válido → match
-    7. Si hay 0 candidatos → sin coincidencia
+    CICLO 1: Match por (region, familia, dígitos)
+    CICLO 2: Match por center_code exacto (cuando formato difiere)
     
     Returns:
         Tuple[List[Dict], List[Dict], List[Dict]]: (coincidencias, ambiguos, sin_match)
@@ -244,10 +239,14 @@ def matching_relativo(df_maestra: pd.DataFrame, sin_coincidencia: List[Dict]) ->
     
     coincidencias = []
     ambiguos = []
-    sin_match = []
+    sin_match_ciclo1 = []
+    sin_match_final = []
     
     # Filtrar supervisores en maestra
     maestra_supervisores = df_maestra[df_maestra[CAMPO_ROL] == ROL_MODIFICABLE].copy()
+    
+    # ==================== CICLO 1: Match por (region, familia, dígitos) ====================
+    print("   📌 Ciclo 1: Buscando por región + familia + dígitos...")
     
     # Crear índice por (region, familia, dígitos) en maestra
     maestra_por_clave = {}
@@ -267,7 +266,7 @@ def matching_relativo(df_maestra: pd.DataFrame, sin_coincidencia: List[Dict]) ->
                 'center_desc_palabras': center_desc_palabras
             }
     
-    # Buscar cada fila sin coincidencia
+    # Buscar cada fila sin coincidencia (Ciclo 1)
     for item in sin_coincidencia:
         comp_row = item['compilado_row']
         
@@ -313,21 +312,93 @@ def matching_relativo(df_maestra: pd.DataFrame, sin_coincidencia: List[Dict]) ->
                     'motivo': 'center_desc no coincide'
                 })
         else:
-            # Sin candidatos
-            sin_match.append({
-                'compilado_idx': item['compilado_idx'],
-                'center_code': item['center_code'],
-                'compilado_row': comp_row,
-                'region': region,
-                'familia': familia,
-                'digitos': digitos
+            # Sin candidatos en Ciclo 1 - pasar a Ciclo 2
+            sin_match_ciclo1.append(item)
+    
+    print(f"      Ciclo 1 - Coincidencias: {len(coincidencias)}")
+    print(f"      Ciclo 1 - Pendientes para Ciclo 2: {len(sin_match_ciclo1)}")
+    
+    # ==================== CICLO 2: Match por center_code exacto ====================
+    if sin_match_ciclo1:
+        print("   🔍 Ciclo 2: Buscando por center_code (ignora diferencia de formato)...")
+        
+        # Crear índice por center_code en maestra
+        maestra_por_center = {}
+        for idx, row in maestra_supervisores.iterrows():
+            center_code = str(row[CAMPO_CENTER_CODE]).strip()
+            center_desc_palabras = extraer_palabras_clave(row.get('center_desc', ''))
+            
+            if center_code not in maestra_por_center:
+                maestra_por_center[center_code] = []
+            
+            maestra_por_center[center_code].append({
+                'idx': idx,
+                'row': row,
+                'center_desc_palabras': center_desc_palabras
             })
+        
+        for item in sin_match_ciclo1:
+            comp_row = item['compilado_row']
+            center_code = str(item['center_code']).strip()
+            center_desc_comp = extraer_palabras_clave(comp_row.get('center_desc', ''))
+            
+            if center_code in maestra_por_center:
+                candidatos = maestra_por_center[center_code]
+                
+                # Buscar el candidato con mayor similitud en center_desc
+                mejor_match = None
+                mejor_score = 0
+                
+                for candidato in candidatos:
+                    palabras_comunes = center_desc_comp & candidato['center_desc_palabras']
+                    score = len(palabras_comunes)
+                    
+                    if score > mejor_score:
+                        mejor_score = score
+                        mejor_match = candidato
+                
+                if mejor_match is not None:
+                    # Match por center_code encontrado
+                    coincidencias.append({
+                        'compilado_idx': item['compilado_idx'],
+                        'maestra_idx': mejor_match['idx'],
+                        'center_code': center_code,
+                        'tipo_match': 'RELATIVO_CENTERCODE',
+                        'compilado_row': comp_row,
+                        'confianza': 0.70,  # Menor confianza porque formato difiere
+                        'region': normalizar_texto(comp_row.get('region_desc', '')),
+                        'familia': 'FORMATO_DIFERENTE',
+                        'digitos': extraer_digitos(center_code),
+                        'palabras_comunes': list(center_desc_comp & mejor_match['center_desc_palabras'])
+                    })
+                else:
+                    # center_code existe pero no hay match de palabras
+                    sin_match_final.append({
+                        'compilado_idx': item['compilado_idx'],
+                        'center_code': center_code,
+                        'compilado_row': comp_row,
+                        'region': normalizar_texto(comp_row.get('region_desc', '')),
+                        'familia': normalizar_familia(comp_row.get('customer_desc', ''), comp_row.get('formato', '')),
+                        'digitos': extraer_digitos(center_code)
+                    })
+            else:
+                # center_code no existe en maestra
+                sin_match_final.append({
+                    'compilado_idx': item['compilado_idx'],
+                    'center_code': center_code,
+                    'compilado_row': comp_row,
+                    'region': normalizar_texto(comp_row.get('region_desc', '')),
+                    'familia': normalizar_familia(comp_row.get('customer_desc', ''), comp_row.get('formato', '')),
+                    'digitos': extraer_digitos(center_code)
+                })
+        
+        print(f"      Ciclo 2 - Coincidencias adicionales: {len(coincidencias) - len([c for c in coincidencias if c['tipo_match'] == 'RELATIVO'])}")
     
-    print(f"   ✅ Coincidencias relativas: {len(coincidencias)}")
+    print(f"   ✅ Coincidencias relativas totales: {len(coincidencias)}")
     print(f"   ⚠️  Casos ambiguos: {len(ambiguos)}")
-    print(f"   ❌ Sin coincidencia: {len(sin_match)}")
+    print(f"   ❌ Sin coincidencia: {len(sin_match_final)}")
     
-    return coincidencias, ambiguos, sin_match
+    return coincidencias, ambiguos, sin_match_final
 
 
 # =============================================================================
