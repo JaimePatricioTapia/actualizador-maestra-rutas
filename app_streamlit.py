@@ -264,7 +264,10 @@ if maestra_file and compilado_file:
                         todas_coincidencias,
                         df_maestra_original,
                         str(pdf_path),
-                        "Reporte de Comparación Maestra vs Compilado"
+                        "Reporte de Comparación Maestra vs Compilado",
+                        coincidencias_exactas=coincidencias_exactas,
+                        coincidencias_relativas=coincidencias_relativas,
+                        sin_match=sin_match
                     )
                     
                     # Leer archivos para descarga

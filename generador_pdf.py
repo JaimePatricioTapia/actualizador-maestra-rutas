@@ -1,30 +1,33 @@
 #!/usr/bin/env python3
 """
-Generador de PDF con comparación visual Maestra vs Compilado
-============================================================
+Generador de PDF para Comparación de Maestra vs Compilado
+==========================================================
 Genera un PDF mostrando las filas comparadas con diferencias resaltadas.
 """
 
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import mm, inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from typing import List, Dict, Tuple
 import pandas as pd
 from datetime import datetime
+from pathlib import Path
+from typing import List, Dict, Tuple
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.units import mm
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
 
 
 # Colores para el reporte
 COLOR_MODIFICADO = colors.HexColor('#C8E6C9')   # Verde claro para modificado
-COLOR_DIFERENCIA = colors.HexColor('#FFCDD2')  # Rojo claro para diferencias
-COLOR_MAESTRA = colors.HexColor('#E3F2FD')     # Azul muy claro para identificar Maestra
-COLOR_COMPILADO = colors.HexColor('#FFF3E0')   # Naranja muy claro para Compilado
-COLOR_HEADER = colors.HexColor('#1976D2')      # Azul para encabezados
+COLOR_DIFERENCIA = colors.HexColor('#FFCDD2')   # Rojo claro para diferencias
+COLOR_MAESTRA = colors.HexColor('#E3F2FD')      # Azul muy claro para identificar Maestra
+COLOR_COMPILADO = colors.HexColor('#FFF3E0')    # Naranja muy claro para Compilado
+COLOR_HEADER = colors.HexColor('#1976D2')       # Azul para encabezados
 COLOR_TEXTO_HEADER = colors.white
+COLOR_SIN_MATCH = colors.HexColor('#FFF9C4')    # Amarillo claro para sin match
 
-# Columnas a mostrar en el reporte
+# Columnas del reporte
 COLUMNAS_REPORTE = [
     'origen', 'region_desc', 'customer_desc', 'formato', 'center_code', 
     'center_desc', 'rol', 'usuario', 'lunes', 'martes', 'miercoles', 
@@ -32,9 +35,8 @@ COLUMNAS_REPORTE = [
 ]
 
 COLUMNAS_CORTAS = [
-    'Origen', 'Región', 'Cliente', 'Formato', 'Código', 
-    'Centro', 'Rol', 'Usuario', 'L', 'M', 'X', 
-    'J', 'V', 'S'
+    'Origen', 'Región', 'Cliente', 'Formato', 'Código', 'Centro', 'Rol', 'Usuario',
+    'L', 'M', 'X', 'J', 'V', 'S'
 ]
 
 # Campos comparables (donde buscar diferencias para resaltar en rojo)
@@ -48,17 +50,7 @@ def normalizar_valor(valor) -> str:
     """Normaliza un valor para comparación."""
     if pd.isna(valor) or valor is None:
         return ''
-    val_str = str(valor).strip().upper()
-    
-    # Valores que significan "vacío" o "no marcado"
-    if val_str in ['0', '0.0', 'NAN', 'NONE', 'N', 'NO', '']:
-        return ''
-    
-    # Valores que significan "marcado" - normalizar todos a 'X'
-    if val_str in ['X', '1', '1.0', 'SI', 'S', 'Y', 'YES', 'TRUE']:
-        return 'X'
-    
-    return val_str
+    return str(valor).strip().lower()
 
 
 def encontrar_diferencias(row_maestra: Dict, row_compilado: Dict) -> List[str]:
@@ -99,20 +91,34 @@ def preparar_fila_tabla(row: Dict, origen: str, campos: List[str]) -> List[str]:
 def generar_pdf_comparacion(coincidencias: List[Dict], 
                             df_maestra: pd.DataFrame,
                             ruta_salida: str,
-                            titulo: str = "Reporte de Comparación") -> str:
+                            titulo: str = "Reporte de Comparación",
+                            coincidencias_exactas: List[Dict] = None,
+                            coincidencias_relativas: List[Dict] = None,
+                            sin_match: List[Dict] = None) -> str:
     """
     Genera un PDF con la comparación visual de todas las filas.
     
     Args:
-        coincidencias: Lista de diccionarios con las coincidencias encontradas
+        coincidencias: Lista de todas las coincidencias (compatibilidad)
         df_maestra: DataFrame de la Maestra original (antes de cambios)
         ruta_salida: Ruta donde guardar el PDF
         titulo: Título del reporte
+        coincidencias_exactas: Lista de coincidencias exactas (opcional)
+        coincidencias_relativas: Lista de coincidencias relativas (opcional)
+        sin_match: Lista de filas sin coincidencia (opcional)
     
     Returns:
         str: Ruta del archivo generado
     """
     print(f"\n📄 Generando PDF de comparación: {ruta_salida}")
+    
+    # Si no se pasan separadas, usar todas las coincidencias como exactas
+    if coincidencias_exactas is None and coincidencias_relativas is None:
+        coincidencias_exactas = coincidencias
+        coincidencias_relativas = []
+    
+    if sin_match is None:
+        sin_match = []
     
     # Crear documento
     doc = SimpleDocTemplate(
@@ -143,13 +149,23 @@ def generar_pdf_comparacion(coincidencias: List[Dict],
         spaceAfter=5*mm
     )
     
+    seccion_style = ParagraphStyle(
+        'SeccionTitulo',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=COLOR_HEADER,
+        spaceBefore=10*mm,
+        spaceAfter=5*mm
+    )
+    
     # Elementos del documento
     elementos = []
     
     # Título
+    total_coincidencias = len(coincidencias_exactas) + len(coincidencias_relativas)
     elementos.append(Paragraph(titulo, titulo_style))
     fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
-    elementos.append(Paragraph(f"Generado: {fecha} | Total comparaciones: {len(coincidencias)}", subtitulo_style))
+    elementos.append(Paragraph(f"Generado: {fecha} | Total comparaciones: {total_coincidencias} | Sin match: {len(sin_match)}", subtitulo_style))
     elementos.append(Spacer(1, 5*mm))
     
     # Leyenda
@@ -174,55 +190,102 @@ def generar_pdf_comparacion(coincidencias: List[Dict],
     elementos.append(leyenda_table)
     elementos.append(Spacer(1, 10*mm))
     
-    # Procesar cada coincidencia
-    comparaciones_por_pagina = 5  # Grupos de 3 filas por página (reducido por 3 filas)
-    contador = 0
-    datos_tabla = []
+    # ==================== SECCIÓN 1: MATCH EXACTO ====================
+    if coincidencias_exactas:
+        elementos.append(Paragraph(f"📌 COINCIDENCIAS EXACTAS ({len(coincidencias_exactas)})", seccion_style))
+        agregar_seccion_coincidencias(elementos, coincidencias_exactas, df_maestra)
     
-    # Encabezados
-    datos_tabla.append(COLUMNAS_CORTAS)
+    # ==================== SECCIÓN 2: MATCH RELATIVO ====================
+    if coincidencias_relativas:
+        elementos.append(PageBreak())
+        elementos.append(Paragraph(f"🔍 COINCIDENCIAS RELATIVAS ({len(coincidencias_relativas)})", seccion_style))
+        agregar_seccion_coincidencias(elementos, coincidencias_relativas, df_maestra)
     
-    for match in coincidencias:
-        maestra_idx = match['maestra_idx']
-        comp_row = match['compilado_row']
-        center_code = match['center_code']
-        
-        # Obtener fila de la maestra
-        maestra_row = df_maestra.loc[maestra_idx].to_dict()
-        
-        # Encontrar diferencias
-        diferencias = encontrar_diferencias(maestra_row, comp_row)
-        
-        # Crear fila MODIFICADO (muestra los valores nuevos que se aplican)
-        fila_modificado = preparar_fila_tabla(comp_row, 'MODIFICADO', COLUMNAS_REPORTE)
-        fila_maestra = preparar_fila_tabla(maestra_row, 'MAESTRA', COLUMNAS_REPORTE)
-        fila_compilado = preparar_fila_tabla(comp_row, 'COMPILADO', COLUMNAS_REPORTE)
-        
-        # Orden: MODIFICADO (verde), MAESTRA (azul), COMPILADO (naranja)
-        datos_tabla.append(fila_modificado)
-        datos_tabla.append(fila_maestra)
-        datos_tabla.append(fila_compilado)
-        
-        contador += 1
-        
-        # Agregar separador cada grupo de 3 filas
-        if contador % comparaciones_por_pagina == 0 and contador < len(coincidencias):
-            # Crear tabla actual y agregar salto de página
-            tabla = crear_tabla_comparacion(datos_tabla, coincidencias[:contador], df_maestra, comparaciones_por_pagina)
-            elementos.append(tabla)
-            elementos.append(PageBreak())
-            datos_tabla = [COLUMNAS_CORTAS]  # Reiniciar con encabezados
-    
-    # Agregar última tabla si hay datos
-    if len(datos_tabla) > 1:
-        tabla = crear_tabla_comparacion(datos_tabla, coincidencias, df_maestra, comparaciones_por_pagina)
-        elementos.append(tabla)
+    # ==================== SECCIÓN 3: SIN COINCIDENCIA ====================
+    if sin_match:
+        elementos.append(PageBreak())
+        elementos.append(Paragraph(f"⚠️ SIN COINCIDENCIA ({len(sin_match)})", seccion_style))
+        agregar_seccion_sin_match(elementos, sin_match)
     
     # Construir PDF
     doc.build(elementos)
     print(f"   ✅ PDF generado exitosamente")
     
     return ruta_salida
+
+
+def agregar_seccion_coincidencias(elementos: List, coincidencias: List[Dict], df_maestra: pd.DataFrame):
+    """Agrega una sección de coincidencias al PDF."""
+    comparaciones_por_pagina = 5
+    contador = 0
+    datos_tabla = [COLUMNAS_CORTAS]
+    
+    for match in coincidencias:
+        maestra_idx = match['maestra_idx']
+        comp_row = match['compilado_row']
+        
+        maestra_row = df_maestra.loc[maestra_idx].to_dict()
+        
+        fila_modificado = preparar_fila_tabla(comp_row, 'MODIFICADO', COLUMNAS_REPORTE)
+        fila_maestra = preparar_fila_tabla(maestra_row, 'MAESTRA', COLUMNAS_REPORTE)
+        fila_compilado = preparar_fila_tabla(comp_row, 'COMPILADO', COLUMNAS_REPORTE)
+        
+        datos_tabla.append(fila_modificado)
+        datos_tabla.append(fila_maestra)
+        datos_tabla.append(fila_compilado)
+        
+        contador += 1
+        
+        if contador % comparaciones_por_pagina == 0 and contador < len(coincidencias):
+            tabla = crear_tabla_comparacion(datos_tabla, coincidencias[:contador], df_maestra, comparaciones_por_pagina)
+            elementos.append(tabla)
+            elementos.append(PageBreak())
+            datos_tabla = [COLUMNAS_CORTAS]
+    
+    if len(datos_tabla) > 1:
+        tabla = crear_tabla_comparacion(datos_tabla, coincidencias, df_maestra, comparaciones_por_pagina)
+        elementos.append(tabla)
+
+
+def agregar_seccion_sin_match(elementos: List, sin_match: List[Dict]):
+    """Agrega la sección de filas sin coincidencia al PDF."""
+    # Columnas para sin match
+    columnas_sin_match = ['Región', 'Cliente', 'Formato', 'Código', 'Centro', 'Usuario']
+    
+    datos_tabla = [columnas_sin_match]
+    
+    for item in sin_match:
+        row = item.get('compilado_row', item)
+        fila = [
+            str(row.get('region_desc', ''))[:30],
+            str(row.get('customer_desc', ''))[:30],
+            str(row.get('formato', ''))[:20],
+            str(row.get('center_code', ''))[:15],
+            str(row.get('center_desc', ''))[:30],
+            str(row.get('usuario', ''))[:30]
+        ]
+        datos_tabla.append(fila)
+    
+    # Crear tabla
+    ancho_disponible = 287 * mm
+    col_widths = [ancho_disponible/6] * 6
+    
+    tabla = Table(datos_tabla, colWidths=col_widths, repeatRows=1)
+    tabla.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), COLOR_HEADER),
+        ('TEXTCOLOR', (0, 0), (-1, 0), COLOR_TEXTO_HEADER),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+        ('BACKGROUND', (0, 1), (-1, -1), COLOR_SIN_MATCH),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elementos.append(tabla)
 
 
 def crear_tabla_comparacion(datos: List[List[str]], 
