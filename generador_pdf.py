@@ -293,14 +293,6 @@ def crear_tabla_comparacion(datos: List[List[str]],
         # Fila COMPILADO (naranja claro - fuente)
         estilos.append(('BACKGROUND', (0, fila_idx + 2), (-1, fila_idx + 2), COLOR_COMPILADO))
         
-        # Resaltar diferencias en la fila MODIFICADO
-        for campo in diferencias:
-            if campo in COLUMNAS_REPORTE:
-                col_idx = COLUMNAS_REPORTE.index(campo)
-                # Resaltar solo en MODIFICADO con rojo
-                estilos.append(('BACKGROUND', (col_idx, fila_idx), (col_idx, fila_idx), COLOR_DIFERENCIA))
-                estilos.append(('FONTNAME', (col_idx, fila_idx), (col_idx, fila_idx), 'Helvetica-Bold'))
-        
         # Línea separadora gruesa después de cada grupo de 3
         estilos.append(('LINEBELOW', (0, fila_idx + 2), (-1, fila_idx + 2), 2, colors.black))
         
