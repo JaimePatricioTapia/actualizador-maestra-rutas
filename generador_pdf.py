@@ -157,8 +157,7 @@ def generar_pdf_comparacion(coincidencias: List[Dict],
         ['Leyenda:', '', ''],
         ['', 'MODIFICADO', 'Valor que se aplica (cambio detectado)'],
         ['', 'MAESTRA', 'Fila original de Maestra de Rutas'],
-        ['', 'COMPILADO', 'Fila del archivo Compilado'],
-        ['', '█ Rojo', 'Celda con diferencia detectada']
+        ['', 'COMPILADO', 'Fila del archivo Compilado']
     ]
     leyenda_table = Table(leyenda_data, colWidths=[60, 80, 220])
     leyenda_table.setStyle(TableStyle([
@@ -166,13 +165,11 @@ def generar_pdf_comparacion(coincidencias: List[Dict],
         ('BACKGROUND', (1, 1), (1, 1), COLOR_MODIFICADO),
         ('BACKGROUND', (1, 2), (1, 2), COLOR_MAESTRA),
         ('BACKGROUND', (1, 3), (1, 3), COLOR_COMPILADO),
-        ('BACKGROUND', (1, 4), (1, 4), COLOR_DIFERENCIA),
         ('ALIGN', (0, 0), (0, 0), 'RIGHT'),
         ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
         ('BOX', (1, 1), (1, 1), 0.5, colors.black),
         ('BOX', (1, 2), (1, 2), 0.5, colors.black),
         ('BOX', (1, 3), (1, 3), 0.5, colors.black),
-        ('BOX', (1, 4), (1, 4), 0.5, colors.black),
     ]))
     elementos.append(leyenda_table)
     elementos.append(Spacer(1, 10*mm))
