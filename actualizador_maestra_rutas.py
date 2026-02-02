@@ -7,6 +7,7 @@ aplicando lógica de coincidencias exactas y relativas.
 
 Autor: Sistema Automatizado
 Fecha: 2026-01-31
+Versión: 2.1.0 - Ciclo 2 con normalización center_code (2026-02-02)
 """
 
 import pandas as pd
