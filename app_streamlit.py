@@ -306,36 +306,43 @@ elif st.session_state.step == 'confirm':
         comp_row = match['compilado_row']
         maestra_row = df_maestra.loc[match['maestra_idx']].to_dict()
         
-        with st.expander(f"Match #{i+1}: Centro {match['center_code']} - {comp_row.get('center_desc', 'N/A')}", expanded=True):
-            col1, col2 = st.columns(2)
+        # Container para cada match
+        with st.container():
+            # Checkbox en línea con el título
+            col_check, col_info = st.columns([1, 11])
             
-            with col1:
-                st.markdown("**📋 Compilado (datos nuevos):**")
-                st.markdown(f"- Región: `{comp_row.get('region_desc', 'N/A')}`")
-                st.markdown(f"- Cliente: `{comp_row.get('customer_desc', 'N/A')}`")
-                st.markdown(f"- Formato: `{comp_row.get('formato', 'N/A')}`")
-                st.markdown(f"- Centro: `{comp_row.get('center_desc', 'N/A')}`")
-                st.markdown(f"- Usuario: `{comp_row.get('usuario', 'N/A')}`")
+            with col_check:
+                st.session_state.matches_confirmados[i] = st.checkbox(
+                    "",  # Sin label, solo el checkbox
+                    value=st.session_state.matches_confirmados[i],
+                    key=f"confirm_{i}",
+                    label_visibility="collapsed"
+                )
             
-            with col2:
-                st.markdown("**📊 Maestra (datos actuales):**")
-                st.markdown(f"- Región: `{maestra_row.get('region_desc', 'N/A')}`")
-                st.markdown(f"- Cliente: `{maestra_row.get('customer_desc', 'N/A')}`")
-                st.markdown(f"- Formato: `{maestra_row.get('formato', 'N/A')}`")
-                st.markdown(f"- Centro: `{maestra_row.get('center_desc', 'N/A')}`")
-                st.markdown(f"- Usuario: `{maestra_row.get('usuario', 'N/A')}`")
+            with col_info:
+                tipo = match.get('tipo_match', 'RELATIVO')
+                confianza = match.get('confianza', 0.7) * 100
+                st.markdown(f"**Centro {match['center_code']}** - {comp_row.get('center_desc', 'N/A')} | `{tipo}` ({confianza:.0f}%)")
             
-            # Tipo de match
-            tipo = match.get('tipo_match', 'RELATIVO')
-            confianza = match.get('confianza', 0.7) * 100
-            st.markdown(f"**Tipo:** `{tipo}` | **Confianza:** `{confianza:.0f}%`")
-            
-            # Checkbox para confirmar
-            st.session_state.matches_confirmados[i] = st.checkbox(
-                f"✅ Aplicar este cambio",
-                value=st.session_state.matches_confirmados[i],
-                key=f"confirm_{i}"
-            )
+            # Expander con detalles (opcional)
+            with st.expander("Ver detalles", expanded=False):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**📋 Compilado (datos nuevos):**")
+                    st.markdown(f"- Región: `{comp_row.get('region_desc', 'N/A')}`")
+                    st.markdown(f"- Cliente: `{comp_row.get('customer_desc', 'N/A')}`")
+                    st.markdown(f"- Formato: `{comp_row.get('formato', 'N/A')}`")
+                    st.markdown(f"- Centro: `{comp_row.get('center_desc', 'N/A')}`")
+                    st.markdown(f"- Usuario: `{comp_row.get('usuario', 'N/A')}`")
+                
+                with col2:
+                    st.markdown("**📊 Maestra (datos actuales):**")
+                    st.markdown(f"- Región: `{maestra_row.get('region_desc', 'N/A')}`")
+                    st.markdown(f"- Cliente: `{maestra_row.get('customer_desc', 'N/A')}`")
+                    st.markdown(f"- Formato: `{maestra_row.get('formato', 'N/A')}`")
+                    st.markdown(f"- Centro: `{maestra_row.get('center_desc', 'N/A')}`")
+                    st.markdown(f"- Usuario: `{maestra_row.get('usuario', 'N/A')}`")
     
     st.markdown("---")
     
