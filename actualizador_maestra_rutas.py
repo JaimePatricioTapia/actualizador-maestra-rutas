@@ -153,10 +153,9 @@ def cargar_datos(ruta_maestra: str, ruta_compilado: str) -> Tuple[pd.DataFrame, 
 
 def matching_exacto(df_maestra: pd.DataFrame, df_compilado: pd.DataFrame) -> Tuple[List[Dict], List[Dict]]:
     """
-    Busca coincidencias exactas. Soporta dos modos:
-    
-    MODO 1 (con center_code): Match por center_code + customer_desc + formato
-    MODO 2 (sin center_code): Match por center_desc exacto
+    Busca coincidencias exactas por center_code + customer_desc + formato donde rol='Supervisor'.
+    Cada fila del Compilado debe coincidir con exactamente UNA fila de la Maestra
+    que tenga el mismo center_code, customer_desc y formato.
     
     Returns:
         Tuple[List[Dict], List[Dict]]: (coincidencias, sin_coincidencia)
@@ -166,91 +165,45 @@ def matching_exacto(df_maestra: pd.DataFrame, df_compilado: pd.DataFrame) -> Tup
     coincidencias = []
     sin_coincidencia = []
     
-    # Detectar si el compilado tiene center_code
-    tiene_center_code = CAMPO_CENTER_CODE in df_compilado.columns and not df_compilado[CAMPO_CENTER_CODE].isna().all()
-    
-    if tiene_center_code:
-        print("   📋 Modo: Matching por CENTER_CODE")
-    else:
-        print("   📋 Modo: Matching por CENTER_DESC (sin center_code)")
-    
     # Filtrar supervisores en maestra
     maestra_supervisores = df_maestra[df_maestra[CAMPO_ROL] == ROL_MODIFICABLE].copy()
     
-    if tiene_center_code:
-        # ========== MODO 1: Con center_code ==========
-        # Crear índice por (center_code, customer_desc_norm, formato_norm) en maestra
-        maestra_por_clave = {}
-        for idx, row in maestra_supervisores.iterrows():
-            cc = str(row[CAMPO_CENTER_CODE]).strip()
-            customer = normalizar_texto(row.get('customer_desc', ''))
-            formato = normalizar_texto(row.get('formato', ''))
-            clave = (cc, customer, formato)
-            
-            if clave not in maestra_por_clave:
-                maestra_por_clave[clave] = idx
+    # Crear índice por (center_code, customer_desc_norm, formato_norm) en maestra
+    maestra_por_clave = {}
+    for idx, row in maestra_supervisores.iterrows():
+        cc = str(row[CAMPO_CENTER_CODE]).strip()
+        customer = normalizar_texto(row.get('customer_desc', ''))
+        formato = normalizar_texto(row.get('formato', ''))
+        clave = (cc, customer, formato)
         
-        # Buscar cada fila del compilado
-        for comp_idx, comp_row in df_compilado.iterrows():
-            cc_compilado = str(comp_row[CAMPO_CENTER_CODE]).strip()
-            customer_compilado = normalizar_texto(comp_row.get('customer_desc', ''))
-            formato_compilado = normalizar_texto(comp_row.get('formato', ''))
-            clave_compilado = (cc_compilado, customer_compilado, formato_compilado)
-            
-            if clave_compilado in maestra_por_clave:
-                maestra_idx = maestra_por_clave[clave_compilado]
-                coincidencias.append({
-                    'compilado_idx': comp_idx,
-                    'maestra_idx': maestra_idx,
-                    'center_code': cc_compilado,
-                    'tipo_match': 'EXACTO',
-                    'compilado_row': comp_row.to_dict(),
-                    'confianza': 1.0
-                })
-            else:
-                sin_coincidencia.append({
-                    'compilado_idx': comp_idx,
-                    'center_code': cc_compilado,
-                    'compilado_row': comp_row.to_dict()
-                })
-    else:
-        # ========== MODO 2: Sin center_code - usar center_desc ==========
-        # Crear índice por center_desc normalizado en maestra
-        maestra_por_center_desc = {}
-        for idx, row in maestra_supervisores.iterrows():
-            center_desc = normalizar_texto(row.get('center_desc', ''))
-            if center_desc and center_desc not in maestra_por_center_desc:
-                maestra_por_center_desc[center_desc] = {
-                    'idx': idx,
-                    'row': row,
-                    'center_code': str(row.get(CAMPO_CENTER_CODE, '')).strip()
-                }
+        if clave not in maestra_por_clave:
+            maestra_por_clave[clave] = idx  # Solo guardamos el primer índice
+    
+    # Buscar cada fila del compilado
+    for comp_idx, comp_row in df_compilado.iterrows():
+        cc_compilado = str(comp_row[CAMPO_CENTER_CODE]).strip()
+        customer_compilado = normalizar_texto(comp_row.get('customer_desc', ''))
+        formato_compilado = normalizar_texto(comp_row.get('formato', ''))
+        clave_compilado = (cc_compilado, customer_compilado, formato_compilado)
         
-        print(f"   📊 Índice creado con {len(maestra_por_center_desc)} center_desc únicos en Maestra")
-        
-        # Buscar cada fila del compilado por center_desc
-        for comp_idx, comp_row in df_compilado.iterrows():
-            center_desc_comp = normalizar_texto(comp_row.get('center_desc', ''))
-            
-            if center_desc_comp in maestra_por_center_desc:
-                # Match exacto por center_desc
-                match_data = maestra_por_center_desc[center_desc_comp]
-                coincidencias.append({
-                    'compilado_idx': comp_idx,
-                    'maestra_idx': match_data['idx'],
-                    'center_code': match_data['center_code'],
-                    'center_desc_match': center_desc_comp,
-                    'tipo_match': 'EXACTO_DESC',
-                    'compilado_row': comp_row.to_dict(),
-                    'confianza': 0.95  # Alta confianza pero menor que EXACTO
-                })
-            else:
-                sin_coincidencia.append({
-                    'compilado_idx': comp_idx,
-                    'center_code': '',
-                    'center_desc': center_desc_comp,
-                    'compilado_row': comp_row.to_dict()
-                })
+        if clave_compilado in maestra_por_clave:
+            # Coincidencia exacta encontrada - center_code + customer + formato coinciden
+            maestra_idx = maestra_por_clave[clave_compilado]
+            coincidencias.append({
+                'compilado_idx': comp_idx,
+                'maestra_idx': maestra_idx,
+                'center_code': cc_compilado,
+                'tipo_match': 'EXACTO',
+                'compilado_row': comp_row.to_dict(),
+                'confianza': 1.0
+            })
+        else:
+            # Sin coincidencia exacta (center_code no existe o customer/formato no coinciden)
+            sin_coincidencia.append({
+                'compilado_idx': comp_idx,
+                'center_code': cc_compilado,
+                'compilado_row': comp_row.to_dict()
+            })
     
     print(f"   ✅ Coincidencias exactas: {len(coincidencias)}")
     print(f"   ⚠️  Sin coincidencia exacta: {len(sin_coincidencia)}")
@@ -258,36 +211,14 @@ def matching_exacto(df_maestra: pd.DataFrame, df_compilado: pd.DataFrame) -> Tup
     return coincidencias, sin_coincidencia
 
 
-def extraer_palabras_clave(texto: str, incluir_numeros: bool = True) -> set:
-    """
-    Extrae palabras clave significativas de un texto (para comparar center_desc).
-    Excluye palabras genéricas y abreviaciones comunes.
-    """
+def extraer_palabras_clave(texto: str) -> set:
+    """Extrae palabras clave de un texto (para comparar center_desc)."""
     if pd.isna(texto):
         return set()
     texto_norm = normalizar_texto(texto)
-    
-    # Palabras a excluir (ruido y abreviaciones muy genéricas)
-    palabras_ruido = {
-        # Artículos y preposiciones
-        'de', 'la', 'el', 'los', 'las', 'y', 'en', 'del', 'x', 'a',
-        # Abreviaciones de cadenas muy genéricas
-        'pet', 'oxxo', 'okm', 'oxx', 'aramco', 'stand',
-        # Abreviaciones de comunas muy genéricas
-        'lco', 'pro', 'stg', 'nun', 'vit', 'flo', 'mai', 'hue', 'smi',
-        'cch', 'pud', 'qui', 'col', 'ece', 'pen', 'lre', 'lba',
-        # Símbolos
-        '/', '-', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0'
-    }
-    
+    # Remover palabras comunes/ruido
+    palabras_ruido = {'de', 'la', 'el', 'los', 'las', 'y', 'en', 'del'}
     palabras = set(texto_norm.split()) - palabras_ruido
-    
-    # Extraer el número final del center_desc (ej: "/ 62" -> "62")
-    if incluir_numeros:
-        numeros = re.findall(r'/\s*(\d+)', texto_norm)
-        for num in numeros:
-            palabras.add(f"#{num}")  # Prefijo # para distinguir como número
-    
     return palabras
 
 
@@ -409,7 +340,7 @@ def matching_relativo(df_maestra: pd.DataFrame, sin_coincidencia: List[Dict]) ->
                 'center_desc_palabras': center_desc_palabras
             })
         
-
+        print(f"      DEBUG: Índice maestra tiene {len(maestra_por_center)} center_codes únicos")
         
         for item in sin_match_ciclo1:
             comp_row = item['compilado_row']
@@ -417,7 +348,7 @@ def matching_relativo(df_maestra: pd.DataFrame, sin_coincidencia: List[Dict]) ->
             center_code_norm = extraer_digitos(center_code_raw)  # Normalizar a solo dígitos
             center_desc_comp = extraer_palabras_clave(comp_row.get('center_desc', ''))
             
-
+            print(f"      DEBUG: Buscando center_code normalizado: '{center_code_norm}' (original: '{center_code_raw}')")
             
             # Buscar por center_code normalizado
             if center_code_norm in maestra_por_center:
@@ -477,71 +408,6 @@ def matching_relativo(df_maestra: pd.DataFrame, sin_coincidencia: List[Dict]) ->
                 })
         
         print(f"      Ciclo 2 - Coincidencias adicionales: {len(coincidencias) - len([c for c in coincidencias if c['tipo_match'] == 'RELATIVO'])}")
-    
-    # ==================== CICLO 3: Match por similitud de center_desc ====================
-    # Este ciclo es especialmente útil cuando el compilado no tiene center_code
-    if sin_match_final:
-        print("   🔍 Ciclo 3: Buscando por similitud de center_desc...")
-        
-        # Crear índice de palabras clave en maestra
-        maestra_palabras_idx = []
-        for idx, row in maestra_supervisores.iterrows():
-            center_desc = row.get('center_desc', '')
-            palabras = extraer_palabras_clave(center_desc)
-            if palabras:
-                maestra_palabras_idx.append({
-                    'idx': idx,
-                    'row': row,
-                    'palabras': palabras,
-                    'center_desc': center_desc,
-                    'center_code': str(row.get(CAMPO_CENTER_CODE, '')).strip()
-                })
-        
-        sin_match_ciclo3 = []
-        
-        for item in sin_match_final:
-            comp_row = item['compilado_row']
-            center_desc_comp = comp_row.get('center_desc', '')
-            palabras_comp = extraer_palabras_clave(center_desc_comp)
-            
-            if not palabras_comp:
-                sin_match_ciclo3.append(item)
-                continue
-            
-            # Buscar el mejor match por palabras en común
-            mejor_match = None
-            mejor_score = 0
-            mejor_palabras = set()
-            
-            for m in maestra_palabras_idx:
-                palabras_comunes = palabras_comp & m['palabras']
-                # Score = palabras en común / total de palabras del compilado
-                score = len(palabras_comunes) / len(palabras_comp) if palabras_comp else 0
-                
-                if score > mejor_score and len(palabras_comunes) >= 2:  # Mínimo 2 palabras en común
-                    mejor_score = score
-                    mejor_match = m
-                    mejor_palabras = palabras_comunes
-            
-            if mejor_match and mejor_score >= 0.5:  # Al menos 50% de similitud
-                coincidencias.append({
-                    'compilado_idx': item['compilado_idx'],
-                    'maestra_idx': mejor_match['idx'],
-                    'center_code': mejor_match['center_code'],
-                    'tipo_match': 'RELATIVO_DESC',
-                    'compilado_row': comp_row,
-                    'confianza': mejor_score * 0.8,  # Máximo 80% confianza
-                    'region': '',
-                    'familia': '',
-                    'digitos': '',
-                    'palabras_comunes': list(mejor_palabras),
-                    'center_desc_maestra': mejor_match['center_desc']
-                })
-            else:
-                sin_match_ciclo3.append(item)
-        
-        sin_match_final = sin_match_ciclo3
-        print(f"      Ciclo 3 - Coincidencias adicionales: {len([c for c in coincidencias if c['tipo_match'] == 'RELATIVO_DESC'])}")
     
     print(f"   ✅ Coincidencias relativas totales: {len(coincidencias)}")
     print(f"   ⚠️  Casos ambiguos: {len(ambiguos)}")
