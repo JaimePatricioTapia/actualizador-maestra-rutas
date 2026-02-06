@@ -153,17 +153,20 @@ def cargar_datos(ruta_maestra: str, ruta_compilado: str) -> Tuple[pd.DataFrame, 
 
 def matching_exacto(df_maestra: pd.DataFrame, df_compilado: pd.DataFrame) -> Tuple[List[Dict], List[Dict]]:
     """
-    Busca coincidencias exactas. Criterios flexibles:
+    Busca coincidencias exactas. 
     
-    PRIORIDAD 1: center_code + center_desc + formato (ignorando espacios extras)
-    PRIORIDAD 2: center_code + formato (si center_desc coincide parcialmente)
+    CAMPO PRINCIPAL: center_desc (si coincide, es un match fuerte)
+    CAMPOS DE CERTIDUMBRE: center_code, formato (agregan confianza)
     
-    Campos ignorados para match: customer_desc, region_desc (pueden estar vacíos en compilado)
+    Lógica:
+    - Si center_desc coincide + ≥1 campo adicional igual → EXACTO (100%)
+    - Si solo center_desc coincide → EXACTO (95%)
+    - Si no → sin coincidencia exacta
     
     Returns:
         Tuple[List[Dict], List[Dict]]: (coincidencias, sin_coincidencia)
     """
-    print("\n🔍 Ejecutando matching exacto (flexibilizado)...")
+    print("\n🔍 Ejecutando matching exacto (center_desc como campo principal)...")
     
     coincidencias = []
     sin_coincidencia = []
@@ -171,84 +174,61 @@ def matching_exacto(df_maestra: pd.DataFrame, df_compilado: pd.DataFrame) -> Tup
     # Filtrar supervisores en maestra
     maestra_supervisores = df_maestra[df_maestra[CAMPO_ROL] == ROL_MODIFICABLE].copy()
     
-    # Crear índice por (center_code, center_desc_norm, formato_norm) en maestra
-    maestra_por_clave = {}
-    # También crear índice secundario por (center_code, formato) para match flexible
-    maestra_por_code_formato = {}
+    # Crear índice por center_desc normalizado en maestra
+    maestra_por_center_desc = {}
     
     for idx, row in maestra_supervisores.iterrows():
-        cc = str(row[CAMPO_CENTER_CODE]).strip()
         center_desc = normalizar_texto(row.get('center_desc', ''))
-        formato = normalizar_texto(row.get('formato', ''))
         
-        # Índice primario: center_code + center_desc + formato
-        clave = (cc, center_desc, formato)
-        if clave not in maestra_por_clave:
-            maestra_por_clave[clave] = idx
-        
-        # Índice secundario: center_code + formato (para match flexible)
-        clave_flexible = (cc, formato)
-        if clave_flexible not in maestra_por_code_formato:
-            maestra_por_code_formato[clave_flexible] = {
+        if center_desc and center_desc not in maestra_por_center_desc:
+            maestra_por_center_desc[center_desc] = {
                 'idx': idx,
-                'center_desc': center_desc,
+                'center_code': str(row.get(CAMPO_CENTER_CODE, '')).strip(),
+                'formato': normalizar_texto(row.get('formato', '')),
                 'row': row
             }
     
+    print(f"   📊 Índice creado con {len(maestra_por_center_desc)} center_desc únicos en Maestra")
+    
     # Buscar cada fila del compilado
     for comp_idx, comp_row in df_compilado.iterrows():
-        cc_compilado = str(comp_row[CAMPO_CENTER_CODE]).strip()
         center_desc_comp = normalizar_texto(comp_row.get('center_desc', ''))
-        formato_compilado = normalizar_texto(comp_row.get('formato', ''))
+        center_code_comp = str(comp_row.get(CAMPO_CENTER_CODE, '')).strip() if CAMPO_CENTER_CODE in comp_row else ''
+        formato_comp = normalizar_texto(comp_row.get('formato', ''))
         
-        # Intento 1: Match exacto por center_code + center_desc + formato
-        clave_compilado = (cc_compilado, center_desc_comp, formato_compilado)
-        
-        if clave_compilado in maestra_por_clave:
-            maestra_idx = maestra_por_clave[clave_compilado]
+        if center_desc_comp in maestra_por_center_desc:
+            # ¡center_desc coincide! - es un match fuerte
+            match_data = maestra_por_center_desc[center_desc_comp]
+            
+            # Contar campos adicionales que coinciden
+            campos_coinciden = 0
+            if center_code_comp and center_code_comp == match_data['center_code']:
+                campos_coinciden += 1
+            if formato_comp and formato_comp == match_data['formato']:
+                campos_coinciden += 1
+            
+            # Calcular confianza basada en campos adicionales
+            if campos_coinciden >= 1:
+                confianza = 1.0  # center_desc + al menos 1 campo más
+            else:
+                confianza = 0.95  # solo center_desc
+            
             coincidencias.append({
                 'compilado_idx': comp_idx,
-                'maestra_idx': maestra_idx,
-                'center_code': cc_compilado,
+                'maestra_idx': match_data['idx'],
+                'center_code': center_code_comp or match_data['center_code'],
                 'tipo_match': 'EXACTO',
                 'compilado_row': comp_row.to_dict(),
-                'confianza': 1.0
+                'confianza': confianza,
+                'campos_match': campos_coinciden + 1  # +1 por center_desc
             })
         else:
-            # Intento 2: Match flexible por center_code + formato
-            clave_flexible = (cc_compilado, formato_compilado)
-            
-            if clave_flexible in maestra_por_code_formato:
-                match_data = maestra_por_code_formato[clave_flexible]
-                
-                # Verificar similitud de center_desc (ignorando espacios extras)
-                desc_maestra = match_data['center_desc'].replace(' ', '')
-                desc_comp = center_desc_comp.replace(' ', '')
-                
-                if desc_maestra == desc_comp or desc_comp in desc_maestra or desc_maestra in desc_comp:
-                    # Match exacto con center_desc similar
-                    coincidencias.append({
-                        'compilado_idx': comp_idx,
-                        'maestra_idx': match_data['idx'],
-                        'center_code': cc_compilado,
-                        'tipo_match': 'EXACTO',
-                        'compilado_row': comp_row.to_dict(),
-                        'confianza': 0.98  # Casi exacto
-                    })
-                else:
-                    # center_code + formato coinciden pero center_desc difiere
-                    sin_coincidencia.append({
-                        'compilado_idx': comp_idx,
-                        'center_code': cc_compilado,
-                        'compilado_row': comp_row.to_dict()
-                    })
-            else:
-                # Sin coincidencia
-                sin_coincidencia.append({
-                    'compilado_idx': comp_idx,
-                    'center_code': cc_compilado,
-                    'compilado_row': comp_row.to_dict()
-                })
+            # center_desc no coincide exactamente
+            sin_coincidencia.append({
+                'compilado_idx': comp_idx,
+                'center_code': center_code_comp,
+                'compilado_row': comp_row.to_dict()
+            })
     
     print(f"   ✅ Coincidencias exactas: {len(coincidencias)}")
     print(f"   ⚠️  Sin coincidencia exacta: {len(sin_coincidencia)}")
