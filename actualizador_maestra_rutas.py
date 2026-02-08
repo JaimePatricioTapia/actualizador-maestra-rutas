@@ -6,8 +6,8 @@ Actualiza la planilla Maestra de Rutas basándose en el archivo Compilado,
 aplicando lógica de coincidencias exactas y relativas.
 
 Autor: Sistema Automatizado
-Fecha: 2026-01-31
-Versión: 2.1.0 - Ciclo 2 con normalización center_code (2026-02-02)
+Fecha: 2026-02-08
+Versión: 2.4.0 - Matching exacto con doble criterio + fix encoding (2026-02-08 01:45)
 """
 
 import pandas as pd
