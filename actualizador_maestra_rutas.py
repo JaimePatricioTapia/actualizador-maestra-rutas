@@ -166,65 +166,80 @@ def cargar_datos(ruta_maestra: str, ruta_compilado: str) -> Tuple[pd.DataFrame, 
 
 def matching_exacto(df_maestra: pd.DataFrame, df_compilado: pd.DataFrame) -> Tuple[List[Dict], List[Dict]]:
     """
-    Busca coincidencias exactas. 
+    Busca coincidencias exactas usando dos criterios:
     
-    CAMPO PRINCIPAL: center_desc (si coincide, es un match fuerte)
-    CAMPOS DE CERTIDUMBRE: center_code, formato (agregan confianza)
+    CRITERIO 1: center_desc coincide (con o sin otros campos)
+    CRITERIO 2: center_code + ≥2 campos coinciden (cliente, formato)
     
     Lógica:
-    - Si center_desc coincide + ≥1 campo adicional igual → EXACTO (100%)
-    - Si solo center_desc coincide → EXACTO (95%)
-    - Si no → sin coincidencia exacta
+    - Si center_desc coincide → EXACTO (95-100%)
+    - Si center_code + cliente + formato coinciden → EXACTO (90-100%)
+    - Si no → sin coincidencia exacta (va a matching relativo)
     
     Returns:
         Tuple[List[Dict], List[Dict]]: (coincidencias, sin_coincidencia)
     """
-    print("\n🔍 Ejecutando matching exacto (center_desc como campo principal)...")
+    print("\n🔍 Ejecutando matching exacto (doble criterio)...")
     
     coincidencias = []
     sin_coincidencia = []
+    procesados = set()  # Para no procesar dos veces
     
     # Filtrar supervisores en maestra
     maestra_supervisores = df_maestra[df_maestra[CAMPO_ROL] == ROL_MODIFICABLE].copy()
     
-    # Crear índice por center_desc normalizado en maestra
+    # ========== ÍNDICE 1: Por center_desc ==========
     maestra_por_center_desc = {}
-    
     for idx, row in maestra_supervisores.iterrows():
         center_desc = normalizar_texto(row.get('center_desc', ''))
-        
         if center_desc and center_desc not in maestra_por_center_desc:
             maestra_por_center_desc[center_desc] = {
                 'idx': idx,
                 'center_code': str(row.get(CAMPO_CENTER_CODE, '')).strip(),
+                'cliente': normalizar_texto(row.get('customer_desc', '')),
                 'formato': normalizar_texto(row.get('formato', '')),
                 'row': row
             }
     
-    print(f"   📊 Índice creado con {len(maestra_por_center_desc)} center_desc únicos en Maestra")
+    # ========== ÍNDICE 2: Por center_code ==========
+    maestra_por_center_code = {}
+    for idx, row in maestra_supervisores.iterrows():
+        center_code = str(row.get(CAMPO_CENTER_CODE, '')).strip()
+        if center_code and center_code not in maestra_por_center_code:
+            maestra_por_center_code[center_code] = {
+                'idx': idx,
+                'center_desc': normalizar_texto(row.get('center_desc', '')),
+                'cliente': normalizar_texto(row.get('customer_desc', '')),
+                'formato': normalizar_texto(row.get('formato', '')),
+                'row': row
+            }
     
-    # Buscar cada fila del compilado
+    print(f"   📊 Índice center_desc: {len(maestra_por_center_desc)} únicos")
+    print(f"   📊 Índice center_code: {len(maestra_por_center_code)} únicos")
+    
+    # ========== BUSCAR COINCIDENCIAS ==========
     for comp_idx, comp_row in df_compilado.iterrows():
         center_desc_comp = normalizar_texto(comp_row.get('center_desc', ''))
         center_code_comp = str(comp_row.get(CAMPO_CENTER_CODE, '')).strip() if CAMPO_CENTER_CODE in comp_row else ''
+        cliente_comp = normalizar_texto(comp_row.get('customer_desc', ''))
         formato_comp = normalizar_texto(comp_row.get('formato', ''))
         
+        match_encontrado = False
+        
+        # CRITERIO 1: Match por center_desc
         if center_desc_comp in maestra_por_center_desc:
-            # ¡center_desc coincide! - es un match fuerte
             match_data = maestra_por_center_desc[center_desc_comp]
             
             # Contar campos adicionales que coinciden
-            campos_coinciden = 0
+            campos = 1  # center_desc ya coincide
             if center_code_comp and center_code_comp == match_data['center_code']:
-                campos_coinciden += 1
+                campos += 1
             if formato_comp and formato_comp == match_data['formato']:
-                campos_coinciden += 1
+                campos += 1
+            if cliente_comp and cliente_comp == match_data['cliente']:
+                campos += 1
             
-            # Calcular confianza basada en campos adicionales
-            if campos_coinciden >= 1:
-                confianza = 1.0  # center_desc + al menos 1 campo más
-            else:
-                confianza = 0.95  # solo center_desc
+            confianza = min(1.0, 0.90 + (campos * 0.025))  # 90% base + 2.5% por campo
             
             coincidencias.append({
                 'compilado_idx': comp_idx,
@@ -233,10 +248,42 @@ def matching_exacto(df_maestra: pd.DataFrame, df_compilado: pd.DataFrame) -> Tup
                 'tipo_match': 'EXACTO',
                 'compilado_row': comp_row.to_dict(),
                 'confianza': confianza,
-                'campos_match': campos_coinciden + 1  # +1 por center_desc
+                'criterio': 'center_desc',
+                'campos_match': campos
             })
-        else:
-            # center_desc no coincide exactamente
+            procesados.add(comp_idx)
+            match_encontrado = True
+        
+        # CRITERIO 2: Match por center_code + campos adicionales
+        if not match_encontrado and center_code_comp in maestra_por_center_code:
+            match_data = maestra_por_center_code[center_code_comp]
+            
+            # Contar campos que coinciden (excluyendo center_code que ya coincide)
+            campos = 1  # center_code ya coincide
+            if formato_comp and formato_comp == match_data['formato']:
+                campos += 1
+            if cliente_comp and cliente_comp == match_data['cliente']:
+                campos += 1
+            
+            # Requiere al menos 2 campos coincidentes (center_code + otro)
+            if campos >= 2:
+                confianza = min(1.0, 0.85 + (campos * 0.05))  # 85% base + 5% por campo
+                
+                coincidencias.append({
+                    'compilado_idx': comp_idx,
+                    'maestra_idx': match_data['idx'],
+                    'center_code': center_code_comp,
+                    'tipo_match': 'EXACTO',
+                    'compilado_row': comp_row.to_dict(),
+                    'confianza': confianza,
+                    'criterio': 'center_code+campos',
+                    'campos_match': campos
+                })
+                procesados.add(comp_idx)
+                match_encontrado = True
+        
+        # Sin coincidencia exacta
+        if not match_encontrado:
             sin_coincidencia.append({
                 'compilado_idx': comp_idx,
                 'center_code': center_code_comp,
