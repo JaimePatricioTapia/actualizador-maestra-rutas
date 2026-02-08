@@ -3,6 +3,7 @@
 Aplicación Streamlit para el Actualizador de Maestra de Rutas
 ============================================================
 Interfaz de usuario moderna con confirmación de matches relativos.
+Versión: 2.4.0 (2026-02-08 01:55)
 """
 
 import streamlit as st

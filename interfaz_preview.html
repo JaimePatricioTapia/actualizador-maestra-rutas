@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Actualizador Maestra de Rutas</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #8892b0;
+            font-size: 1.1rem;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .card h2 {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: #00d4ff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .upload-grid {
+                grid-template-columns: 1fr;
+            }
+            h1 { font-size: 1.8rem; }
+        }
+        
+        .upload-zone {
+            border: 2px dashed rgba(0, 212, 255, 0.3);
+            border-radius: 15px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .upload-zone:hover {
+            border-color: #00d4ff;
+            background: rgba(0, 212, 255, 0.05);
+            transform: translateY(-3px);
+        }
+        
+        .upload-zone.dragover {
+            border-color: #7b2cbf;
+            background: rgba(123, 44, 191, 0.1);
+            transform: scale(1.02);
+        }
+        
+        .upload-zone.has-file {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.08);
+        }
+        
+        .upload-zone input[type="file"] {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        .upload-label {
+            font-size: 1rem;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+        
+        .upload-hint {
+            font-size: 0.85rem;
+            color: #8892b0;
+        }
+        
+        .file-name {
+            margin-top: 10px;
+            padding: 8px 15px;
+            background: rgba(0, 255, 136, 0.15);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: #00ff88;
+            display: none;
+            word-break: break-all;
+        }
+        
+        .upload-zone.has-file .file-name {
+            display: inline-block;
+        }
+        
+        .btn {
+            padding: 18px 40px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            color: #fff;
+            width: 100%;
+            justify-content: center;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 212, 255, 0.35);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        @media (max-width: 768px) {
+            .kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        .kpi-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .kpi-value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #00ff88, #00d4ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .kpi-label {
+            font-size: 0.85rem;
+            color: #8892b0;
+            margin-top: 5px;
+        }
+        
+        .results {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .results.show {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .download-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+        
+        @media (max-width: 768px) {
+            .download-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .download-btn {
+            padding: 18px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #fff;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .download-btn:hover {
+            background: rgba(0, 212, 255, 0.1);
+            border-color: #00d4ff;
+            transform: translateY(-2px);
+        }
+        
+        .download-icon {
+            font-size: 1.8rem;
+        }
+        
+        .download-info {
+            flex: 1;
+        }
+        
+        .download-title {
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+        
+        .download-desc {
+            font-size: 0.8rem;
+            color: #8892b0;
+        }
+        
+        .alert {
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .alert.show {
+            display: flex;
+        }
+        
+        .alert-success {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+        }
+        
+        .alert-info {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            color: #00d4ff;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            color: #8892b0;
+            font-size: 0.9rem;
+        }
+        
+        .glow-text {
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 class="glow-text">📊 Actualizador Maestra de Rutas</h1>
+            <p class="subtitle">Sistema de sincronización y comparación de planillas</p>
+        </header>
+        
+        <div class="alert alert-info" id="infoAlert">
+            ℹ️ Esta es una vista previa de la interfaz. Para procesar archivos, ejecuta: <code>python3 app.py</code>
+        </div>
+        
+        <div class="card">
+            <h2>📁 Cargar Archivos</h2>
+            <div class="upload-grid">
+                <div class="upload-zone" id="maestraZone">
+                    <input type="file" name="maestra" id="maestraInput" accept=".xlsx,.xls">
+                    <div class="upload-icon">📋</div>
+                    <div class="upload-label">Maestra de Rutas</div>
+                    <div class="upload-hint">Arrastra o haz clic para seleccionar</div>
+                    <div class="file-name" id="maestraFileName"></div>
+                </div>
+                <div class="upload-zone" id="compiladoZone">
+                    <input type="file" name="compilado" id="compiladoInput" accept=".xlsx,.xls">
+                    <div class="upload-icon">📝</div>
+                    <div class="upload-label">Archivo Compilado</div>
+                    <div class="upload-hint">Arrastra o haz clic para seleccionar</div>
+                    <div class="file-name" id="compiladoFileName"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <button type="button" class="btn btn-primary" id="processBtn" disabled>
+                <span>🚀</span>
+                <span>Procesar Archivos</span>
+            </button>
+        </div>
+        
+        <!-- Demo Results Section -->
+        <div class="results show" id="demoResults">
+            <div class="card">
+                <h2>📈 Resultados (Demo)</h2>
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-value">100%</div>
+                        <div class="kpi-label">Match Exacto</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-value">0%</div>
+                        <div class="kpi-label">Match Relativo</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-value">97.9%</div>
+                        <div class="kpi-label">Filas Actualizadas</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-value">316</div>
+                        <div class="kpi-label">Total Cambios</div>
+                    </div>
+                </div>
+                
+                <h2>📥 Descargar Archivos</h2>
+                <div class="download-grid">
+                    <a href="#" class="download-btn">
+                        <span class="download-icon">📊</span>
+                        <div class="download-info">
+                            <div class="download-title">Maestra Actualizada</div>
+                            <div class="download-desc">Excel con cambios aplicados</div>
+                        </div>
+                    </a>
+                    <a href="#" class="download-btn">
+                        <span class="download-icon">📈</span>
+                        <div class="download-info">
+                            <div class="download-title">Reporte KPIs</div>
+                            <div class="download-desc">Detalle de cambios</div>
+                        </div>
+                    </a>
+                    <a href="#" class="download-btn">
+                        <span class="download-icon">📄</span>
+                        <div class="download-info">
+                            <div class="download-title">Comparación PDF</div>
+                            <div class="download-desc">Visual de diferencias</div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Sistema de Actualización de Maestra de Rutas v1.0 | 2026</p>
+        </footer>
+    </div>
+    
+    <script>
+        // File upload handling
+        const maestraInput = document.getElementById('maestraInput');
+        const compiladoInput = document.getElementById('compiladoInput');
+        const maestraZone = document.getElementById('maestraZone');
+        const compiladoZone = document.getElementById('compiladoZone');
+        const processBtn = document.getElementById('processBtn');
+        const infoAlert = document.getElementById('infoAlert');
+        
+        // Show info alert
+        infoAlert.classList.add('show');
+        
+        function updateFileName(input, zone, fileNameElId) {
+            const fileNameEl = document.getElementById(fileNameElId);
+            if (input.files.length > 0) {
+                fileNameEl.textContent = input.files[0].name;
+                zone.classList.add('has-file');
+            } else {
+                zone.classList.remove('has-file');
+            }
+            checkFilesSelected();
+        }
+        
+        function checkFilesSelected() {
+            if (maestraInput.files.length > 0 && compiladoInput.files.length > 0) {
+                processBtn.disabled = false;
+            } else {
+                processBtn.disabled = true;
+            }
+        }
+        
+        maestraInput.addEventListener('change', () => updateFileName(maestraInput, maestraZone, 'maestraFileName'));
+        compiladoInput.addEventListener('change', () => updateFileName(compiladoInput, compiladoZone, 'compiladoFileName'));
+        
+        // Drag and drop
+        [maestraZone, compiladoZone].forEach(zone => {
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('dragover');
+            });
+            
+            zone.addEventListener('dragleave', () => {
+                zone.classList.remove('dragover');
+            });
+            
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+            });
+        });
+    </script>
+</body>
+</html>
