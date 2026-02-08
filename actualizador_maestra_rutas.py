@@ -41,10 +41,23 @@ DOMINIO_EMAIL = 'castano.cl'
 # =============================================================================
 
 def normalizar_texto(texto: str) -> str:
-    """Normaliza texto: minúsculas, sin acentos, espacios simples."""
+    """
+    Normaliza texto: corrige encoding, minúsculas, sin acentos, espacios simples.
+    Maneja casos de encoding corrupto (UTF-8 interpretado como Latin-1).
+    """
     if pd.isna(texto):
         return ''
-    texto = str(texto).lower().strip()
+    texto = str(texto).strip()
+    
+    # Intentar corregir encoding doble (UTF-8 leído como Latin-1)
+    # Esto arregla casos como "VIÃ'A" → "VIÑA"
+    try:
+        texto_bytes = texto.encode('latin-1')
+        texto = texto_bytes.decode('utf-8')
+    except (UnicodeDecodeError, UnicodeEncodeError):
+        pass  # Si falla, mantener el texto original
+    
+    texto = texto.lower()
     # Remover acentos
     texto = unicodedata.normalize('NFD', texto)
     texto = ''.join(c for c in texto if unicodedata.category(c) != 'Mn')
