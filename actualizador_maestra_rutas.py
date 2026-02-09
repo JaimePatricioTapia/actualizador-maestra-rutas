@@ -6,8 +6,8 @@ Actualiza la planilla Maestra de Rutas basándose en el archivo Compilado,
 aplicando lógica de coincidencias exactas y relativas.
 
 Autor: Sistema Automatizado
-Fecha: 2026-02-08
-Versión: 2.4.0 - Matching exacto con doble criterio + fix encoding (2026-02-08 01:45)
+Fecha: 2026-02-09
+Versión: 2.5.0 - Fix matching con center_codes duplicados (selecciona mejor candidato)
 """
 
 import pandas as pd
@@ -188,31 +188,35 @@ def matching_exacto(df_maestra: pd.DataFrame, df_compilado: pd.DataFrame) -> Tup
     # Filtrar supervisores en maestra
     maestra_supervisores = df_maestra[df_maestra[CAMPO_ROL] == ROL_MODIFICABLE].copy()
     
-    # ========== ÍNDICE 1: Por center_desc ==========
+    # ========== ÍNDICE 1: Por center_desc (lista de candidatos) ==========
     maestra_por_center_desc = {}
     for idx, row in maestra_supervisores.iterrows():
         center_desc = normalizar_texto(row.get('center_desc', ''))
-        if center_desc and center_desc not in maestra_por_center_desc:
-            maestra_por_center_desc[center_desc] = {
+        if center_desc:
+            if center_desc not in maestra_por_center_desc:
+                maestra_por_center_desc[center_desc] = []
+            maestra_por_center_desc[center_desc].append({
                 'idx': idx,
                 'center_code': str(row.get(CAMPO_CENTER_CODE, '')).strip(),
                 'cliente': normalizar_texto(row.get('customer_desc', '')),
                 'formato': normalizar_texto(row.get('formato', '')),
                 'row': row
-            }
+            })
     
-    # ========== ÍNDICE 2: Por center_code ==========
+    # ========== ÍNDICE 2: Por center_code (lista de candidatos) ==========
     maestra_por_center_code = {}
     for idx, row in maestra_supervisores.iterrows():
         center_code = str(row.get(CAMPO_CENTER_CODE, '')).strip()
-        if center_code and center_code not in maestra_por_center_code:
-            maestra_por_center_code[center_code] = {
+        if center_code:
+            if center_code not in maestra_por_center_code:
+                maestra_por_center_code[center_code] = []
+            maestra_por_center_code[center_code].append({
                 'idx': idx,
                 'center_desc': normalizar_texto(row.get('center_desc', '')),
                 'cliente': normalizar_texto(row.get('customer_desc', '')),
                 'formato': normalizar_texto(row.get('formato', '')),
                 'row': row
-            }
+            })
     
     print(f"   📊 Índice center_desc: {len(maestra_por_center_desc)} únicos")
     print(f"   📊 Índice center_code: {len(maestra_por_center_code)} únicos")
@@ -226,58 +230,75 @@ def matching_exacto(df_maestra: pd.DataFrame, df_compilado: pd.DataFrame) -> Tup
         
         match_encontrado = False
         
-        # CRITERIO 1: Match por center_desc
+        # CRITERIO 1: Match por center_desc (seleccionar mejor candidato)
         if center_desc_comp in maestra_por_center_desc:
-            match_data = maestra_por_center_desc[center_desc_comp]
+            candidatos = maestra_por_center_desc[center_desc_comp]
             
-            # Contar campos adicionales que coinciden
-            campos = 1  # center_desc ya coincide
-            if center_code_comp and center_code_comp == match_data['center_code']:
-                campos += 1
-            if formato_comp and formato_comp == match_data['formato']:
-                campos += 1
-            if cliente_comp and cliente_comp == match_data['cliente']:
-                campos += 1
+            # Buscar el candidato con más campos coincidentes
+            mejor_candidato = None
+            mejor_campos = 0
             
-            confianza = min(1.0, 0.90 + (campos * 0.025))  # 90% base + 2.5% por campo
+            for candidato in candidatos:
+                campos = 1  # center_desc ya coincide
+                if center_code_comp and center_code_comp == candidato['center_code']:
+                    campos += 1
+                if formato_comp and formato_comp == candidato['formato']:
+                    campos += 1
+                if cliente_comp and cliente_comp == candidato['cliente']:
+                    campos += 1
+                
+                if campos > mejor_campos:
+                    mejor_campos = campos
+                    mejor_candidato = candidato
             
-            coincidencias.append({
-                'compilado_idx': comp_idx,
-                'maestra_idx': match_data['idx'],
-                'center_code': center_code_comp or match_data['center_code'],
-                'tipo_match': 'EXACTO',
-                'compilado_row': comp_row.to_dict(),
-                'confianza': confianza,
-                'criterio': 'center_desc',
-                'campos_match': campos
-            })
-            procesados.add(comp_idx)
-            match_encontrado = True
-        
-        # CRITERIO 2: Match por center_code + campos adicionales
-        if not match_encontrado and center_code_comp in maestra_por_center_code:
-            match_data = maestra_por_center_code[center_code_comp]
-            
-            # Contar campos que coinciden (excluyendo center_code que ya coincide)
-            campos = 1  # center_code ya coincide
-            if formato_comp and formato_comp == match_data['formato']:
-                campos += 1
-            if cliente_comp and cliente_comp == match_data['cliente']:
-                campos += 1
-            
-            # Requiere al menos 2 campos coincidentes (center_code + otro)
-            if campos >= 2:
-                confianza = min(1.0, 0.85 + (campos * 0.05))  # 85% base + 5% por campo
+            if mejor_candidato:
+                confianza = min(1.0, 0.90 + (mejor_campos * 0.025))  # 90% base + 2.5% por campo
                 
                 coincidencias.append({
                     'compilado_idx': comp_idx,
-                    'maestra_idx': match_data['idx'],
+                    'maestra_idx': mejor_candidato['idx'],
+                    'center_code': center_code_comp or mejor_candidato['center_code'],
+                    'tipo_match': 'EXACTO',
+                    'compilado_row': comp_row.to_dict(),
+                    'confianza': confianza,
+                    'criterio': 'center_desc',
+                    'campos_match': mejor_campos
+                })
+                procesados.add(comp_idx)
+                match_encontrado = True
+        
+        # CRITERIO 2: Match por center_code + campos adicionales (seleccionar mejor candidato)
+        if not match_encontrado and center_code_comp in maestra_por_center_code:
+            candidatos = maestra_por_center_code[center_code_comp]
+            
+            # Buscar el candidato con más campos coincidentes
+            mejor_candidato = None
+            mejor_campos = 0
+            
+            for candidato in candidatos:
+                campos = 1  # center_code ya coincide
+                if formato_comp and formato_comp == candidato['formato']:
+                    campos += 1
+                if cliente_comp and cliente_comp == candidato['cliente']:
+                    campos += 1
+                
+                if campos > mejor_campos:
+                    mejor_campos = campos
+                    mejor_candidato = candidato
+            
+            # Requiere al menos 2 campos coincidentes (center_code + otro)
+            if mejor_candidato and mejor_campos >= 2:
+                confianza = min(1.0, 0.85 + (mejor_campos * 0.05))  # 85% base + 5% por campo
+                
+                coincidencias.append({
+                    'compilado_idx': comp_idx,
+                    'maestra_idx': mejor_candidato['idx'],
                     'center_code': center_code_comp,
                     'tipo_match': 'EXACTO',
                     'compilado_row': comp_row.to_dict(),
                     'confianza': confianza,
                     'criterio': 'center_code+campos',
-                    'campos_match': campos
+                    'campos_match': mejor_campos
                 })
                 procesados.add(comp_idx)
                 match_encontrado = True
