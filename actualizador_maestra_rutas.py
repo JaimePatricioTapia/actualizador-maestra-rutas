@@ -6,8 +6,8 @@ Actualiza la planilla Maestra de Rutas basándose en el archivo Compilado,
 aplicando lógica de coincidencias exactas y relativas.
 
 Autor: Sistema Automatizado
-Fecha: 2026-02-09
-Versión: 2.5.0 - Fix matching con center_codes duplicados (selecciona mejor candidato)
+Fecha: 2026-02-10
+Versión: 2.6.0 - Limpieza automática de rutas previas del usuario
 """
 
 import pandas as pd
@@ -530,6 +530,9 @@ def aplicar_cambios(df_maestra: pd.DataFrame, coincidencias: List[Dict]) -> Tupl
     """
     Aplica los cambios del compilado a la maestra.
     
+    IMPORTANTE: Primero limpia las X de rutas anteriores del usuario
+    que ya no aparecen en el compilado actual, y luego aplica las nuevas.
+    
     Returns:
         Tuple[DataFrame, List[Dict]]: (maestra_actualizada, log_cambios)
     """
@@ -538,6 +541,73 @@ def aplicar_cambios(df_maestra: pd.DataFrame, coincidencias: List[Dict]) -> Tupl
     df_actualizado = df_maestra.copy()
     log_cambios = []
     
+    # ========== PASO 1: Identificar rutas por usuario en el compilado ==========
+    # Agrupar coincidencias por usuario para saber qué filas tiene cada uno
+    rutas_por_usuario = {}  # {usuario: {dia: set(maestra_idx)}}
+    dias_por_usuario = {}   # {usuario: set(dias_con_x)}
+    
+    for match in coincidencias:
+        comp_row = match['compilado_row']
+        maestra_idx = match['maestra_idx']
+        usuario = normalizar_usuario(comp_row.get(CAMPO_USUARIO, ''))
+        
+        if not usuario:
+            continue
+        
+        if usuario not in rutas_por_usuario:
+            rutas_por_usuario[usuario] = {}
+            dias_por_usuario[usuario] = set()
+        
+        # Registrar qué días tiene X este usuario en el compilado
+        for dia in DIAS_MODIFICABLES:
+            if dia in comp_row:
+                valor = normalizar_dia(comp_row[dia])
+                if valor:  # Tiene X en este día
+                    dias_por_usuario[usuario].add(dia)
+                    if dia not in rutas_por_usuario[usuario]:
+                        rutas_por_usuario[usuario][dia] = set()
+                    rutas_por_usuario[usuario][dia].add(maestra_idx)
+    
+    # ========== PASO 2: Limpiar X previas de rutas no incluidas ==========
+    # Para cada usuario, buscar en la maestra todas sus filas con X
+    # y limpiar las que NO están en el compilado actual
+    limpieza_count = 0
+    
+    for usuario, dias_activos in dias_por_usuario.items():
+        for dia in dias_activos:
+            # Índices de la maestra que SÍ están en el compilado para este usuario+día
+            idx_compilado = rutas_por_usuario[usuario].get(dia, set())
+            
+            # Buscar TODAS las filas de la maestra donde este usuario tiene X en este día
+            mask_usuario = df_actualizado[CAMPO_USUARIO].apply(
+                lambda x: normalizar_usuario(str(x) if not pd.isna(x) else '') == usuario
+            )
+            mask_dia = df_actualizado[dia].apply(
+                lambda x: normalizar_dia(x) != '' if not pd.isna(x) else False
+            )
+            mask_supervisor = df_actualizado[CAMPO_ROL] == ROL_MODIFICABLE
+            
+            filas_con_x = df_actualizado[mask_usuario & mask_dia & mask_supervisor].index
+            
+            # Limpiar las X de filas que NO están en el compilado
+            for idx in filas_con_x:
+                if idx not in idx_compilado:
+                    valor_anterior = str(df_actualizado.at[idx, dia]).strip()
+                    df_actualizado.at[idx, dia] = np.nan
+                    limpieza_count += 1
+                    center_code_limpio = str(df_actualizado.at[idx, CAMPO_CENTER_CODE]).strip()
+                    log_cambios.append({
+                        'center_code': center_code_limpio,
+                        'campo': dia,
+                        'valor_anterior': valor_anterior,
+                        'valor_nuevo': '(limpiado)',
+                        'tipo_match': 'LIMPIEZA'
+                    })
+    
+    if limpieza_count > 0:
+        print(f"   🧹 Rutas previas limpiadas: {limpieza_count}")
+    
+    # ========== PASO 3: Aplicar cambios del compilado ==========
     for match in coincidencias:
         maestra_idx = match['maestra_idx']
         comp_row = match['compilado_row']
