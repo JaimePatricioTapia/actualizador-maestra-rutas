@@ -26,7 +26,7 @@ from generador_pdf import generar_pdf_comparacion
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Actualizador Maestra de Rutas - Castaño",
+    page_title="Maestra de Rutas",
     page_icon="🥐",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -177,7 +177,7 @@ st.markdown("""
 st.markdown('<div class="header-bar">🥐 Sistema de Planificación de Rutas - Castaño</div>', unsafe_allow_html=True)
 
 # Título principal
-st.markdown('<h1 class="main-title">Actualizador Maestra de Rutas</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-title">Maestra de Rutas</h1>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Sistema de sincronización y comparación de planillas</p>', unsafe_allow_html=True)
 
 # Inicializar session state
